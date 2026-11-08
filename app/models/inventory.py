@@ -20,11 +20,12 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, CreatedAt, UUIDPrimaryKey
+from app.models.base import Base, UUIDPrimaryKey
 from app.models.enums import MovementType, db_enum
 
 
@@ -52,7 +53,7 @@ class InventoryItem(UUIDPrimaryKey, Base):
     )
 
 
-class StockMovement(UUIDPrimaryKey, CreatedAt, Base):
+class StockMovement(UUIDPrimaryKey, Base):
     """Immutable: a database trigger rejects UPDATE and DELETE on this table."""
 
     __tablename__ = "stock_movements"
@@ -68,6 +69,11 @@ class StockMovement(UUIDPrimaryKey, CreatedAt, Base):
     reference_type: Mapped[str | None] = mapped_column(String(32))  # "order" | "transfer" | "manual"
     reference_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     actor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    # clock_timestamp(), not now(): now() is frozen for a whole transaction, so several
+    # movements written by one request would otherwise share a timestamp.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("clock_timestamp()"), nullable=False
+    )
 
     __table_args__ = (
         CheckConstraint("on_hand_delta <> 0 OR reserved_delta <> 0", name="has_effect"),

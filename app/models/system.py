@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,7 +12,7 @@ from app.models.base import Base, CreatedAt, UUIDPrimaryKey
 from app.models.enums import AuditOutcome, db_enum
 
 
-class AuditLog(UUIDPrimaryKey, CreatedAt, Base):
+class AuditLog(UUIDPrimaryKey, Base):
     """Security-relevant and inventory-changing actions. Append-only (trigger-enforced)."""
 
     __tablename__ = "audit_logs"
@@ -26,6 +26,9 @@ class AuditLog(UUIDPrimaryKey, CreatedAt, Base):
     ip_address: Mapped[str | None] = mapped_column(String(45))
     request_id: Mapped[str | None] = mapped_column(String(64))
     details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("clock_timestamp()"), nullable=False
+    )
 
     __table_args__ = (
         Index("ix_audit_logs_created_at", "created_at"),
