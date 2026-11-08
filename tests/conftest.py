@@ -43,7 +43,7 @@ from alembic import command  # noqa: E402
 from app.core.database import SessionLocal, engine  # noqa: E402
 from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Base, Branch, Role, User  # noqa: E402
+from app.models import Base, Branch, Product, Role, User  # noqa: E402
 
 DEFAULT_PASSWORD = "Passw0rd!"
 
@@ -139,3 +139,19 @@ def world(make_branch, make_user) -> dict:
         "colombo_manager": make_user(Role.BRANCH_MANAGER, colombo),
         "colombo_staff": make_user(Role.STAFF, colombo),
     }
+
+
+@pytest.fixture
+def make_product(db: Session) -> Callable[..., Product]:
+    def _make(sku: str | None = None, price: str = "100.00", is_active: bool = True) -> Product:
+        product = Product(
+            sku=sku or f"SKU-{uuid.uuid4().hex[:6].upper()}",
+            name=f"Product {sku or ''}".strip(),
+            unit_price=price,
+            is_active=is_active,
+        )
+        db.add(product)
+        db.commit()
+        return product
+
+    return _make
