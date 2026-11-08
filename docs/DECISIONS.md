@@ -76,7 +76,7 @@ Failed logins and access denials are written on a **separate connection** that c
 ### D14. Tests run against real PostgreSQL
 SQLite does not support row locking the same way and would not exercise the CHECK constraints and triggers that this design relies on. The test database is built with the real migrations.
 
-## Day 2: branches and products
+## Day 2: branches, products, inventory and the ledger
 
 ### D15. Precise ledger timestamps (migration 0002)
 `now()` in PostgreSQL is the transaction's start time, so several movements written by one request
@@ -91,6 +91,28 @@ Branch *data* (stock, orders, users) stays restricted to the branch.
 - A **branch** can't be deactivated while it has reserved stock, open orders, or open transfers; those would be stranded.
 - A **product** can always be deactivated. It then can't be ordered, transferred or stocked in,
   but existing reservations can still be completed or cancelled, and remaining stock can be written off.
+
+### D18. One stock engine (`app/services/stock.py`)
+Every stock change goes through three functions:
+`lock_inventory` (SELECT … FOR UPDATE), `ensure_available` (check every line before changing any),
+and `apply_movement` (change the row + write the ledger entry). Keeping this in one place means
+the locking and ledger rules can't be forgotten by a new feature.
+
+### D19. Lock rows in a fixed order (sorted by product id)
+If two requests both need products A and B, both lock A first, then B. Neither can end up holding
+B while waiting for A, which rules out deadlocks between our own transactions.
+
+### D20. Three layers of protection against invalid stock
+1. Service checks give a clear error (`insufficient_stock` with every short line listed).
+2. `apply_movement` refuses any change that would make a row invalid.
+3. Database CHECK constraints reject it even if both of the above had a bug.
+
+### D21. Manual adjustments
+- Positive = goods received or count correction; negative = damage, loss or correction.
+- A reason is mandatory and goes into the ledger.
+- **Reserved units cannot be removed.** Removing them would silently break a promise made to a customer or another branch.
+- Only branch managers (own branch) and admins may adjust (see ROLES.md).
+- A product that has never been stocked at a branch gets its inventory row created on its first positive adjustment.
 
 ## Assumptions
 - A product catalogue is shared by all branches; stock is per branch.

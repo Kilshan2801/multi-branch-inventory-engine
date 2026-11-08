@@ -21,6 +21,10 @@ Right now the project has:
 - user management for admins
 - one consistent error format for every endpoint
 - branches and products: create, update, list and deactivate (nothing is ever deleted)
+- stock per branch: on hand, reserved and available
+- manual stock adjustments with a required reason (managers only)
+- a stock history (ledger) that records every change and can't be edited
+- an audit log that admins and managers can read
 
 More detail lives in the `docs` folder:
 
@@ -89,8 +93,9 @@ alembic upgrade head
 python -m scripts.seed
 ```
 
-The seed script adds three branches (Kandy, Colombo, Galle) and these users. They all share the
-password from `SEED_DEFAULT_PASSWORD`:
+The seed script adds three branches (Kandy, Colombo, Galle), four products with some opening stock,
+and these users. All users share the password from `SEED_DEFAULT_PASSWORD`, and running the script
+again is safe:
 
 | User | Role | Branch |
 |---|---|---|
@@ -115,7 +120,7 @@ pytest
 ```
 
 The tests use a real PostgreSQL database (`TEST_DATABASE_URL`), not a fake one, because a lot of
-what they check (the rules inside the database) only exists in PostgreSQL. Before the tests run,
+what they check (the rules inside the database, and row locking) only exists in PostgreSQL. Before the tests run,
 the test database is rebuilt from the migrations, so the migrations get tested too.
 
 You can also run just one part: `pytest tests/unit` (quick, no database needed) or `pytest tests/integration`.
@@ -146,6 +151,11 @@ timestamps on the stock history and audit log record the exact moment of each ch
 | `POST /api/v1/products` | admins |
 | `GET /api/v1/products`, `GET /api/v1/products/{id}` | anyone who is logged in |
 | `PATCH /api/v1/products/{id}` | admins (update or deactivate) |
+| `GET /api/v1/branches/{id}/inventory` | people in that branch (admins: any branch) |
+| `GET /api/v1/branches/{id}/inventory/{product_id}` | people in that branch (admins: any branch) |
+| `POST /api/v1/branches/{id}/inventory/adjustments` | that branch's manager, admins |
+| `GET /api/v1/branches/{id}/stock-movements` | people in that branch (admins: any branch) |
+| `GET /api/v1/audit-logs` | admins (everything), managers (their own branch) |
 | `GET /health` | anyone |
 
 When something goes wrong, every endpoint answers in the same format, so a client only has to handle one shape:
@@ -166,6 +176,7 @@ app/
   models/     the database tables, with their rules
   schemas/    what requests and responses look like (and their validation)
   services/   the actual business logic
+              stock.py is the one place that changes stock numbers (lock, check, change, record)
 alembic/      database migrations
 scripts/      the demo data script
 tests/        unit tests and tests against the real database
