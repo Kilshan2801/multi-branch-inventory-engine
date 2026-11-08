@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -74,3 +74,18 @@ def require_permission(*permissions: Permission) -> Callable[..., User]:
         return user
 
     return checker
+
+
+class Pagination:
+    """Common `limit` / `offset` query parameters."""
+
+    def __init__(
+        self,
+        limit: Annotated[int, Query(ge=1, le=100, description="Page size (max 100)")] = 50,
+        offset: Annotated[int, Query(ge=0, description="Rows to skip")] = 0,
+    ) -> None:
+        self.limit = limit
+        self.offset = offset
+
+
+Paging = Annotated[Pagination, Depends()]
