@@ -43,7 +43,7 @@ from alembic import command  # noqa: E402
 from app.core.database import SessionLocal, engine  # noqa: E402
 from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Base, Branch, Product, Role, User  # noqa: E402
+from app.models import Base, Branch, InventoryItem, Product, Role, User  # noqa: E402
 
 DEFAULT_PASSWORD = "Passw0rd!"
 
@@ -155,3 +155,55 @@ def make_product(db: Session) -> Callable[..., Product]:
         return product
 
     return _make
+
+
+@pytest.fixture
+def set_stock(db: Session) -> Callable[..., InventoryItem]:
+    """Put stock in place through the real adjustment service, so the ledger is written too."""
+    from app.schemas.inventory import AdjustmentCreate
+    from app.services.audit import RequestContext
+    from app.services.inventory_service import adjust_stock
+
+    def _set(branch: Branch, product, on_hand: int) -> InventoryItem:
+        actor = db.query(User).filter(User.role == Role.ADMIN).first()
+        if actor is None:
+            actor = User(
+                email=f"seed.{uuid.uuid4().hex[:6]}@example.com", full_name="Seeder", password_hash="x", role=Role.ADMIN
+            )
+            db.add(actor)
+            db.flush()
+        adjust_stock(
+            db,
+            branch.id,
+            AdjustmentCreate(product_id=product.id, quantity_delta=on_hand, reason="Opening stock"),
+            actor,
+            RequestContext(),
+        )
+        db.commit()
+        return db.query(InventoryItem).filter_by(branch_id=branch.id, product_id=product.id).one()
+
+    return _set
+
+
+def stock_of(db: Session, branch: Branch, product) -> tuple[int, int]:
+    """(on_hand, reserved) read fresh from the database."""
+    row = db.execute(
+        text("SELECT on_hand, reserved FROM inventory WHERE branch_id = :b AND product_id = :p"),
+        {"b": branch.id, "p": product.id},
+    ).first()
+    return (row.on_hand, row.reserved) if row else (0, 0)
+
+
+def ledger_matches_inventory(db: Session) -> bool:
+    """Every inventory row equals the sum of its ledger movements."""
+    mismatches = db.execute(
+        text("""
+        SELECT i.id FROM inventory i
+        LEFT JOIN (
+            SELECT branch_id, product_id, SUM(on_hand_delta) AS oh, SUM(reserved_delta) AS rs
+            FROM stock_movements GROUP BY branch_id, product_id
+        ) m ON m.branch_id = i.branch_id AND m.product_id = i.product_id
+        WHERE i.on_hand <> COALESCE(m.oh, 0) OR i.reserved <> COALESCE(m.rs, 0)
+    """)
+    ).all()
+    return not mismatches
