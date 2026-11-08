@@ -13,13 +13,14 @@ and tests are written with Pytest.
 
 ## Where things are so far
 
-Right now the project has the foundation in place:
+Right now the project has:
 
 - the full database design, with rules inside the database that stop bad stock numbers
 - login with JWT tokens
 - three roles (Admin, Branch Manager, Staff), and checks that keep people inside their own branch
 - user management for admins
 - one consistent error format for every endpoint
+- branches and products: create, update, list and deactivate (nothing is ever deleted)
 
 More detail lives in the `docs` folder:
 
@@ -126,6 +127,9 @@ alembic upgrade head        # bring the database up to date
 alembic downgrade -1        # undo the last change
 ```
 
+There are two migrations so far: `0001` creates all the tables, rules and triggers, and `0002` makes the
+timestamps on the stock history and audit log record the exact moment of each change.
+
 ## Endpoints so far
 
 | Endpoint | Who can use it |
@@ -136,6 +140,12 @@ alembic downgrade -1        # undo the last change
 | `GET /api/v1/users` | admins (everyone), managers (their own branch) |
 | `GET /api/v1/users/{id}` | admins, managers (their own branch) |
 | `PATCH /api/v1/users/{id}` | admins |
+| `POST /api/v1/branches` | admins |
+| `GET /api/v1/branches`, `GET /api/v1/branches/{id}` | anyone who is logged in |
+| `PATCH /api/v1/branches/{id}` | admins (update or deactivate) |
+| `POST /api/v1/products` | admins |
+| `GET /api/v1/products`, `GET /api/v1/products/{id}` | anyone who is logged in |
+| `PATCH /api/v1/products/{id}` | admins (update or deactivate) |
 | `GET /health` | anyone |
 
 When something goes wrong, every endpoint answers in the same format, so a client only has to handle one shape:

@@ -23,7 +23,7 @@ so a role change or deactivation takes effect immediately.
 
 | Permission | Admin | Branch Manager | Staff | Notes |
 |---|:-:|:-:|:-:|---|
-| `branch:read` | ✅ | ✅ own | ✅ own | |
+| `branch:read` | ✅ | ✅ | ✅ | the branch directory (codes, names) is visible to everyone |
 | `branch:manage` | ✅ | ❌ | ❌ | create, update, deactivate |
 | `product:read` | ✅ | ✅ | ✅ | the catalogue is shared by all branches |
 | `product:manage` | ✅ | ❌ | ❌ | create, update, deactivate |

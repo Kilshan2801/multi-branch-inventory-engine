@@ -76,6 +76,22 @@ Failed logins and access denials are written on a **separate connection** that c
 ### D14. Tests run against real PostgreSQL
 SQLite does not support row locking the same way and would not exercise the CHECK constraints and triggers that this design relies on. The test database is built with the real migrations.
 
+## Day 2: branches and products
+
+### D15. Precise ledger timestamps (migration 0002)
+`now()` in PostgreSQL is the transaction's start time, so several movements written by one request
+would share one timestamp. `clock_timestamp()` records the real time of each insert. Done as a
+second migration rather than editing the first, as a real deployed project would have to.
+
+### D16. Branch directory is visible to everyone signed in
+Staff and managers need to know the other branches (ids, codes, names) to coordinate stock between them.
+Branch *data* (stock, orders, users) stays restricted to the branch.
+
+### D17. Deactivation rules
+- A **branch** can't be deactivated while it has reserved stock, open orders, or open transfers; those would be stranded.
+- A **product** can always be deactivated. It then can't be ordered, transferred or stocked in,
+  but existing reservations can still be completed or cancelled, and remaining stock can be written off.
+
 ## Assumptions
 - A product catalogue is shared by all branches; stock is per branch.
 - Admins are global and belong to no branch; every other user belongs to exactly one.

@@ -1,8 +1,8 @@
 # Database schema
 
-PostgreSQL (tested on 16 and 18). Created by the Alembic migration in
-[`alembic/versions/0001_initial_schema.py`](../alembic/versions/0001_initial_schema.py).
-All primary keys are UUIDs. All timestamps are `timestamptz`.
+PostgreSQL (tested on 16 and 18). Created by the Alembic migrations in [`alembic/versions/`](../alembic/versions/):
+`0001` creates every table, constraint, index and trigger; `0002` switches the ledger and audit
+timestamps to `clock_timestamp()`. All primary keys are UUIDs. All timestamps are `timestamptz`.
 
 ## Entity–relationship diagram
 
