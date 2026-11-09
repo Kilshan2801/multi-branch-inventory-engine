@@ -168,10 +168,20 @@ same transaction**, recording the deltas and the resulting values. So:
 - The ledger cannot be edited or deleted: a trigger raises an error on `UPDATE`/`DELETE`.
   Mistakes are fixed with a new, compensating movement, as in accounting.
 
-## Status columns
+## State machines
 
-| Column | Allowed values (CHECK constraint) |
+Implemented in [`order_service.py`](../app/services/order_service.py) (the `TRANSITIONS` table).
+Any other move returns `409 invalid_transition` and changes nothing; repeating a move that already
+happened returns the current state unchanged.
+
+```
+Orders:     pending ──► reserved ──► confirmed ──► fulfilled
+               │            │             │
+               └────────────┴─────────────┴──► cancelled   (releases reservation)
+```
+
+| Transition | Stock effect (all with a ledger entry referencing the order) |
 |---|---|
-| `orders.status` | `pending`, `reserved`, `confirmed`, `fulfilled`, `cancelled` |
-| `transfers.status` | `requested`, `approved`, `rejected`, `dispatched`, `received`, `cancelled` |
-| `stock_movements.movement_type` | `adjustment`, `reservation`, `reservation_release`, `fulfillment`, `transfer_out`, `transfer_in` |
+| order reserve | `reserved += qty` (all lines or none) |
+| order fulfil | `on_hand -= qty`, `reserved -= qty` |
+| order cancel | `reserved -=` what the ledger says this order holds |

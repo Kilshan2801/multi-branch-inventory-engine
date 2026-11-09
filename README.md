@@ -25,6 +25,8 @@ Right now the project has:
 - manual stock adjustments with a required reason (managers only)
 - a stock history (ledger) that records every change and can't be edited
 - an audit log that admins and managers can read
+- customer orders that move through pending → reserved → confirmed → fulfilled, or get cancelled
+- safe retries: sending the same request twice never reserves stock twice
 
 More detail lives in the `docs` folder:
 
@@ -155,8 +157,15 @@ timestamps on the stock history and audit log record the exact moment of each ch
 | `GET /api/v1/branches/{id}/inventory/{product_id}` | people in that branch (admins: any branch) |
 | `POST /api/v1/branches/{id}/inventory/adjustments` | that branch's manager, admins |
 | `GET /api/v1/branches/{id}/stock-movements` | people in that branch (admins: any branch) |
+| `POST /api/v1/orders` | people in that branch |
+| `GET /api/v1/orders`, `GET /api/v1/orders/{id}` | people in that branch (admins: any branch) |
+| `POST /api/v1/orders/{id}/reserve`, `/confirm`, `/fulfill`, `/cancel` | people in that branch |
 | `GET /api/v1/audit-logs` | admins (everything), managers (their own branch) |
 | `GET /health` | anyone |
+
+Creating an order or a stock adjustment accepts an `Idempotency-Key` header. If the same request is
+sent again with the same key (for example after a network timeout), you get the first answer back instead of
+the work being done twice.
 
 When something goes wrong, every endpoint answers in the same format, so a client only has to handle one shape:
 
@@ -177,6 +186,7 @@ app/
   schemas/    what requests and responses look like (and their validation)
   services/   the actual business logic
               stock.py is the one place that changes stock numbers (lock, check, change, record)
+              order_service.py holds the order steps, idempotency.py handles retries
 alembic/      database migrations
 scripts/      the demo data script
 tests/        unit tests and tests against the real database

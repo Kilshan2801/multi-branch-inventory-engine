@@ -114,6 +114,41 @@ B while waiting for A, which rules out deadlocks between our own transactions.
 - Only branch managers (own branch) and admins may adjust (see ROLES.md).
 - A product that has never been stocked at a branch gets its inventory row created on its first positive adjustment.
 
+## Day 3: orders and idempotency
+
+### D22. Order state machine
+`pending → reserved → confirmed → fulfilled`, with `cancelled` reachable from pending, reserved and confirmed.
+- **Reserve** holds stock; **fulfil** takes it out of the branch; **cancel** releases it.
+- **Confirmed orders can still be cancelled** (e.g. payment reversed) because the goods haven't left. Fulfilled orders can't: the goods are gone, so that would need a returns process (out of scope).
+- `pending → confirmed` is not allowed: an order can't be confirmed without stock behind it.
+- Each response includes `allowed_actions`, so clients don't need to hard-code the rules.
+
+### D23. Create-and-reserve in one call (`"reserve": true`)
+Saves a round trip and matches the task's scenario ("reservation requests arrive"). If any line
+is short, **no order is created at all**, so there are no orphaned pending orders from failed attempts.
+Creating as pending and calling `/reserve` later is also supported; a failed reserve leaves the order pending.
+
+### D24. Repeating a completed transition is a no-op, not an error
+`reserve` on a reserved order returns 200 with the unchanged order. A client retrying after a
+timeout can't tell whether its first call worked, and it shouldn't get an error for a request
+that effectively succeeded. Transitions that are actually invalid (e.g. cancel a fulfilled order) return 409.
+
+### D25. Cancellation releases what the ledger says, not what the order says
+The amount released is the sum of this order's `reserved_delta` in `stock_movements`.
+It's equal to the order quantities in practice, but deriving it from the ledger guarantees
+"release exactly what was reserved", even if a release is ever repeated or a reservation was partial.
+
+### D26. Idempotency keys for non-idempotent writes
+Order creation and stock adjustments accept an `Idempotency-Key` header. The key is stored in the
+same transaction as the work, so a key exists only if the work committed. A unique index makes
+concurrent duplicates wait for, then replay, the first. Failures are not cached.
+
+### D27. Prices are snapshotted on order lines
+`order_items.unit_price` is copied from the product at order time, so later price changes don't alter existing orders.
+
+### D28. Failed attempts are audited even though they roll back
+Failed reservations and invalid transitions are written to the audit log on a separate connection.
+
 ## Assumptions
 - A product catalogue is shared by all branches; stock is per branch.
 - Admins are global and belong to no branch; every other user belongs to exactly one.
