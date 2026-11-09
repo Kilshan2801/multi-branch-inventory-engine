@@ -59,6 +59,12 @@ class ConflictError(AppError):
     code = "conflict"
 
 
+class InvalidTransitionError(ConflictError):
+    """The requested action isn't allowed from the current status (orders, transfers)."""
+
+    code = "invalid_transition"
+
+
 class BusinessValidationError(AppError):
     status_code = 422
     code = "validation_error"

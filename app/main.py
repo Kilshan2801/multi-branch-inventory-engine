@@ -4,7 +4,7 @@ import uuid
 from fastapi import FastAPI, Request
 from sqlalchemy import text
 
-from app.api.routes import auth, catalog, inventory, users
+from app.api.routes import auth, catalog, inventory, orders, users
 from app.core.config import get_settings
 from app.core.database import engine
 from app.core.errors import register_exception_handlers
@@ -44,6 +44,7 @@ app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(catalog.branches, prefix=API_PREFIX)
 app.include_router(catalog.products, prefix=API_PREFIX)
 app.include_router(inventory.router, prefix=API_PREFIX)
+app.include_router(orders.router, prefix=API_PREFIX)
 app.include_router(inventory.audit, prefix=API_PREFIX)
 
 
