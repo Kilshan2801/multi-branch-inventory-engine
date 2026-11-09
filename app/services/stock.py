@@ -25,7 +25,7 @@ import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -137,3 +137,19 @@ def apply_movement(
     )
     db.add(movement)
     return movement
+
+
+def reserved_by_reference(db: Session, branch_id: uuid.UUID, reference: StockReference) -> dict[uuid.UUID, int]:
+    """Units currently held in reserve for `reference` (such as an order), per product,
+    computed from the ledger. Releasing exactly these amounts guarantees a cancellation
+    gives back what was reserved: no more, no less."""
+    rows = db.execute(
+        select(StockMovement.product_id, func.sum(StockMovement.reserved_delta))
+        .where(
+            StockMovement.branch_id == branch_id,
+            StockMovement.reference_type == reference.type,
+            StockMovement.reference_id == reference.id,
+        )
+        .group_by(StockMovement.product_id)
+    ).all()
+    return {product_id: int(total) for product_id, total in rows if total}
