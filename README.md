@@ -27,11 +27,13 @@ Right now the project has:
 - an audit log that admins and managers can read
 - customer orders that move through pending → reserved → confirmed → fulfilled, or get cancelled
 - safe retries: sending the same request twice never reserves stock twice
+- the concurrency challenge: several people reserving the same stock at the same moment can never oversell
 
 More detail lives in the `docs` folder:
 
 - [docs/SCHEMA.md](docs/SCHEMA.md): the database diagram and the rules on each table
 - [docs/ROLES.md](docs/ROLES.md): what each role can and can't do, and why
+- [docs/CONCURRENCY.md](docs/CONCURRENCY.md): how simultaneous requests are kept safe, and how to see it for yourself
 - [docs/DECISIONS.md](docs/DECISIONS.md): the design choices I made and their trade-offs
 
 ## What you need
@@ -96,7 +98,8 @@ python -m scripts.seed
 ```
 
 The seed script adds three branches (Kandy, Colombo, Galle), four products with some opening stock,
-and these users. All users share the password from `SEED_DEFAULT_PASSWORD`, and running the script
+and these users. Kandy starts with exactly 10 phones (`PHN-001`), the same numbers as the concurrency
+challenge, so it's easy to try. All users share the password from `SEED_DEFAULT_PASSWORD`, and running the script
 again is safe:
 
 | User | Role | Branch |
@@ -125,7 +128,26 @@ The tests use a real PostgreSQL database (`TEST_DATABASE_URL`), not a fake one, 
 what they check (the rules inside the database, and row locking) only exists in PostgreSQL. Before the tests run,
 the test database is rebuilt from the migrations, so the migrations get tested too.
 
-You can also run just one part: `pytest tests/unit` (quick, no database needed) or `pytest tests/integration`.
+You can also run just one part: `pytest tests/unit` (quick, no database needed), `pytest tests/integration`,
+or `pytest tests/concurrency -v -s` for the races (more on that below).
+
+## The concurrency challenge
+
+The task's example: a branch has 10 units, and three people try to reserve 6, 5 and 4 at the same moment.
+Without protection, all three could see "10 available" and all three would succeed, so 15 units
+would be promised out of 10.
+
+The way I prevent that is to lock the stock row in PostgreSQL (`SELECT ... FOR UPDATE`) before checking it.
+The requests then take turns: each one sees what the previous one left, so the total can never go
+past 10, and a request that doesn't fit fails cleanly without leaving anything behind.
+The full explanation, including the other options I considered, is in [docs/CONCURRENCY.md](docs/CONCURRENCY.md).
+
+To see it yourself:
+
+```bash
+pytest tests/concurrency -v -s        # the race, repeated 20 times with real threads
+python -m scripts.concurrency_demo    # the same race against the running server
+```
 
 ## Database migrations
 
@@ -188,7 +210,7 @@ app/
               stock.py is the one place that changes stock numbers (lock, check, change, record)
               order_service.py holds the order steps, idempotency.py handles retries
 alembic/      database migrations
-scripts/      the demo data script
-tests/        unit tests and tests against the real database
-docs/         database diagram, roles, design decisions
+scripts/      demo data, and the live race script
+tests/        unit tests, tests against the real database, and the concurrency races
+docs/         database diagram, roles, concurrency, design decisions
 ```

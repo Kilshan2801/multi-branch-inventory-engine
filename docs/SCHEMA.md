@@ -156,8 +156,8 @@ erDiagram
 | `available` | `on_hand − reserved`: what can still be promised. Computed by PostgreSQL, so it can never be stale. |
 
 Because `reserved ≤ on_hand` is a CHECK constraint, **available can never be negative**,
-even if application code has a bug. Concurrency safety is built on top of this
-guarantee, not instead of it.
+even if application code has a bug. Concurrency safety (row locking, see
+[CONCURRENCY.md](CONCURRENCY.md)) is built on top of this guarantee, not instead of it.
 
 ## Ledger rule
 

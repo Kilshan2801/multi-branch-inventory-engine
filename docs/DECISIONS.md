@@ -114,7 +114,9 @@ B while waiting for A, which rules out deadlocks between our own transactions.
 - Only branch managers (own branch) and admins may adjust (see ROLES.md).
 - A product that has never been stocked at a branch gets its inventory row created on its first positive adjustment.
 
-## Day 3: orders and idempotency
+## Day 3: orders, concurrency and idempotency
+
+Full explanation of the concurrency design: [CONCURRENCY.md](CONCURRENCY.md).
 
 ### D22. Order state machine
 `pending → reserved → confirmed → fulfilled`, with `cancelled` reachable from pending, reserved and confirmed.
@@ -148,6 +150,11 @@ concurrent duplicates wait for, then replay, the first. Failures are not cached.
 
 ### D28. Failed attempts are audited even though they roll back
 Failed reservations and invalid transitions are written to the audit log on a separate connection.
+
+### D29. Pessimistic row locking for stock (`SELECT … FOR UPDATE`)
+Chosen over conditional updates, optimistic locking, SERIALIZABLE and application locks
+(comparison table in CONCURRENCY.md). Verified by removing the lock: the race test then
+oversold 15 of 10 units.
 
 ## Assumptions
 - A product catalogue is shared by all branches; stock is per branch.
