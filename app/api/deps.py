@@ -3,7 +3,8 @@
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import Depends, Query, Request
+from fastapi import Depends, Header, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from app.core.errors import AuthenticationError, PermissionDeniedError
 from app.core.permissions import Permission, has_permission
 from app.core.security import decode_access_token
 from app.models import AuditOutcome, User
+from app.services import idempotency
 from app.services.audit import RequestContext, record_now
 
 _bearer = HTTPBearer(auto_error=False, description="Paste the access_token from POST /api/v1/auth/login")
@@ -89,3 +91,20 @@ class Pagination:
 
 
 Paging = Annotated[Pagination, Depends()]
+
+
+IdempotencyKeyHeader = Annotated[
+    str | None,
+    Header(
+        alias=idempotency.HEADER,
+        min_length=1,
+        max_length=128,
+        description="Unique per logical request (e.g. a UUID). Re-send the same key when retrying: "
+        "the original response is returned and the work is not done twice.",
+    ),
+]
+
+
+def idempotent_response(outcome: idempotency.Outcome) -> JSONResponse:
+    headers = {idempotency.REPLAY_HEADER: "true"} if outcome.replayed else None
+    return JSONResponse(status_code=outcome.status_code, content=outcome.body, headers=headers)

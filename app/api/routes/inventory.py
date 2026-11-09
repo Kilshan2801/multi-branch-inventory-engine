@@ -3,8 +3,9 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import JSONResponse
 
-from app.api.deps import Ctx, DbSession, Paging, require_permission
+from app.api.deps import Ctx, DbSession, IdempotencyKeyHeader, Paging, idempotent_response, require_permission
 from app.core.permissions import Permission
 from app.models import AuditOutcome, MovementType, User
 from app.schemas.common import Page, error_responses
@@ -15,7 +16,7 @@ from app.schemas.inventory import (
     InventoryRead,
     StockMovementRead,
 )
-from app.services import audit_query, inventory_service
+from app.services import audit_query, idempotency, inventory_service
 from app.services.authorization import ensure_branch_access
 
 router = APIRouter(prefix="/branches/{branch_id}", tags=["Inventory"])
@@ -59,14 +60,27 @@ def get_inventory(
     responses=error_responses(401, 403, 404, 409, 422),
 )
 def adjust_inventory(
-    branch_id: uuid.UUID, body: AdjustmentCreate, db: DbSession, ctx: Ctx, user: CanAdjustInventory
-) -> AdjustmentResult:
+    branch_id: uuid.UUID,
+    body: AdjustmentCreate,
+    db: DbSession,
+    ctx: Ctx,
+    user: CanAdjustInventory,
+    idempotency_key: IdempotencyKeyHeader = None,
+) -> JSONResponse:
     """Manual stock change with a mandatory reason: goods received (+), count corrections (+/-),
-    damage or loss (-). Units that are reserved can't be removed (409 `insufficient_stock`)."""
+    damage or loss (-). Units that are reserved can't be removed (409 `insufficient_stock`).
+    Send an `Idempotency-Key` so a retried request can't apply the change twice."""
     ensure_branch_access(user, branch_id, ctx, action="inventory.adjust")
-    result = inventory_service.adjust_stock(db, branch_id, body, user, ctx)
-    db.commit()
-    return result
+    outcome = idempotency.execute(
+        db,
+        user=user,
+        key=idempotency_key,
+        endpoint=f"POST /branches/{branch_id}/inventory/adjustments",
+        payload=body,
+        status_code=status.HTTP_201_CREATED,
+        operation=lambda: inventory_service.adjust_stock(db, branch_id, body, user, ctx),
+    )
+    return idempotent_response(outcome)
 
 
 @router.get("/stock-movements", response_model=Page[StockMovementRead], responses=error_responses(401, 403, 404))
