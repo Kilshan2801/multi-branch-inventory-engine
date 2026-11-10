@@ -156,6 +156,41 @@ Chosen over conditional updates, optimistic locking, SERIALIZABLE and applicatio
 (comparison table in CONCURRENCY.md). Verified by removing the lock: the race test then
 oversold 15 of 10 units.
 
+## Day 4: transfers
+
+### D30. Transfer state machine
+`requested → approved → dispatched → received`, plus `rejected` (from requested) and `cancelled` (from requested or approved).
+
+| Step | Who (besides admin) | Stock effect |
+|---|---|---|
+| request | manager of source **or** destination | none |
+| approve | source manager | source `reserved += qty` (all lines or none) |
+| reject | source manager, reason required | none |
+| dispatch | source manager | source `on_hand -= qty`, `reserved -= qty` → in transit |
+| receive | destination manager **or staff** | destination `on_hand += qty` |
+| cancel | manager of either branch, before dispatch | source reservation released |
+
+### D31. Approval reserves stock; dispatch can never exceed it
+Reserving at approval time means the units can't be sold to customers or written off between approval
+and dispatch, so a dispatch can never fail for lack of stock and can never send more than was there.
+"Over-dispatch" is stopped at approval with `409 insufficient_stock`.
+
+### D32. Stock is "in transit" between dispatch and receipt
+Dispatch takes units out of the source's `on_hand`; receipt adds them at the destination. In between, they
+are the quantities on `dispatched` transfers (`GET /transfers?status=dispatched`). This models reality:
+the goods are on a truck, not on either shelf. Conservation holds at every moment:
+`Σ on_hand (all branches) + Σ in-transit = constant`, which is checked in the tests.
+
+### D33. Receipt adds exactly what was dispatched (read from the ledger)
+The destination receives the sum of the transfer's `transfer_out` movements, not a number re-read from
+the request, so the two sides of a transfer always match.
+
+### D34. No cancellation after dispatch
+Once goods have physically left, "cancel" would make units vanish. Undoing a dispatched transfer means
+receiving it and creating a return transfer, which keeps both movements visible in the ledger.
+*Known limitation:* no partial receipt or damaged-in-transit handling; a receiving branch records damage
+afterwards with a negative adjustment.
+
 ## Assumptions
 - A product catalogue is shared by all branches; stock is per branch.
 - Admins are global and belong to no branch; every other user belongs to exactly one.

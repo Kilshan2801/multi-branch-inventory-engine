@@ -170,7 +170,8 @@ same transaction**, recording the deltas and the resulting values. So:
 
 ## State machines
 
-Implemented in [`order_service.py`](../app/services/order_service.py) (the `TRANSITIONS` table).
+Implemented in [`order_service.py`](../app/services/order_service.py) and
+[`transfer_service.py`](../app/services/transfer_service.py) (the `TRANSITIONS` tables).
 Any other move returns `409 invalid_transition` and changes nothing; repeating a move that already
 happened returns the current state unchanged.
 
@@ -178,10 +179,19 @@ happened returns the current state unchanged.
 Orders:     pending ──► reserved ──► confirmed ──► fulfilled
                │            │             │
                └────────────┴─────────────┴──► cancelled   (releases reservation)
+
+Transfers:  requested ──► approved ──► dispatched ──► received
+               │             │
+               ├──► rejected └──► cancelled               (before dispatch only)
+               └──► cancelled
 ```
 
-| Transition | Stock effect (all with a ledger entry referencing the order) |
+| Transition | Stock effect (all with a ledger entry referencing the order/transfer) |
 |---|---|
 | order reserve | `reserved += qty` (all lines or none) |
 | order fulfil | `on_hand -= qty`, `reserved -= qty` |
 | order cancel | `reserved -=` what the ledger says this order holds |
+| transfer approve | source `reserved += qty` (all lines or none) |
+| transfer dispatch | source `on_hand -= qty`, `reserved -= qty` (now in transit) |
+| transfer receive | destination `on_hand += qty` dispatched |
+| transfer cancel | source `reserved -=` what the ledger says this transfer holds |

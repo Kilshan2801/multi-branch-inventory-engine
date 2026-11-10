@@ -86,8 +86,8 @@ Code: [`app/services/stock.py`](../app/services/stock.py) (`lock_inventory`,
 
 An order for products A and B, and another for B and A, could otherwise lock one
 row each and wait for each other forever. Rows are **always locked in product-id
-order** (`ORDER BY product_id`), and an order's own row is always locked
-*before* its inventory rows. With one global order, no cycle (and so no deadlock)
+order** (`ORDER BY product_id`), and an order's or transfer's own row is always
+locked *before* its inventory rows. With one global order, no cycle (and so no deadlock)
 between our own transactions is possible.
 
 ### Three layers of protection
@@ -165,6 +165,7 @@ pytest tests/concurrency -v -s
 | `test_concurrent_duplicate_requests_with_one_idempotency_key` | 5 simultaneous copies of one request create one order. |
 | `test_cancel_and_fulfil_racing_on_one_order` | Cancel and fulfil at the same time: exactly one wins, stock matches the winner. |
 | `test_race_through_the_http_api` | The 6/5/4 race through the full HTTP stack. |
+| `test_orders_and_transfer_approvals_compete_for_the_same_stock` | Orders and a transfer approval race for the same 10 units: total reserved never exceeds 10. |
 
 **Live, against a running server** (for the demo):
 

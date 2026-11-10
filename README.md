@@ -28,6 +28,7 @@ Right now the project has:
 - customer orders that move through pending → reserved → confirmed → fulfilled, or get cancelled
 - safe retries: sending the same request twice never reserves stock twice
 - the concurrency challenge: several people reserving the same stock at the same moment can never oversell
+- transfers between branches: request → approve → dispatch → receive, with reject and cancel
 
 More detail lives in the `docs` folder:
 
@@ -182,10 +183,15 @@ timestamps on the stock history and audit log record the exact moment of each ch
 | `POST /api/v1/orders` | people in that branch |
 | `GET /api/v1/orders`, `GET /api/v1/orders/{id}` | people in that branch (admins: any branch) |
 | `POST /api/v1/orders/{id}/reserve`, `/confirm`, `/fulfill`, `/cancel` | people in that branch |
+| `POST /api/v1/transfers` | a manager of either branch, admins |
+| `GET /api/v1/transfers`, `GET /api/v1/transfers/{id}` | people in either branch |
+| `POST /api/v1/transfers/{id}/approve`, `/reject`, `/dispatch` | the sending branch's manager, admins |
+| `POST /api/v1/transfers/{id}/receive` | the receiving branch (manager or staff), admins |
+| `POST /api/v1/transfers/{id}/cancel` | a manager of either branch, admins (only before dispatch) |
 | `GET /api/v1/audit-logs` | admins (everything), managers (their own branch) |
 | `GET /health` | anyone |
 
-Creating an order or a stock adjustment accepts an `Idempotency-Key` header. If the same request is
+Creating an order, a transfer or a stock adjustment accepts an `Idempotency-Key` header. If the same request is
 sent again with the same key (for example after a network timeout), you get the first answer back instead of
 the work being done twice.
 
@@ -209,6 +215,7 @@ app/
   services/   the actual business logic
               stock.py is the one place that changes stock numbers (lock, check, change, record)
               order_service.py holds the order steps, idempotency.py handles retries
+              transfer_service.py holds the transfer steps
 alembic/      database migrations
 scripts/      demo data, and the live race script
 tests/        unit tests, tests against the real database, and the concurrency races
