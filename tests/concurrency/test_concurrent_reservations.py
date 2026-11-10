@@ -281,3 +281,59 @@ def test_race_through_the_http_api(db, world, make_product, set_stock):
     assert succeeded in VALID_OUTCOMES
     assert all(r.status_code == 409 and r.json()["error"]["code"] == "insufficient_stock" for r in refused)
     assert stock_of(db, world["kandy"], product) == (10, sum(succeeded))
+
+
+def test_orders_and_transfer_approvals_compete_for_the_same_stock(db, world, make_product, set_stock):
+    """Orders and a transfer approval race for the same 10 units. Whatever the
+    interleaving, total reserved never exceeds 10 and the ledger stays consistent."""
+    from app.schemas.transfers import TransferCreate
+    from app.services import transfer_service
+
+    for round_no in range(10):
+        product = make_product(f"MIX-{round_no}")
+        set_stock(world["kandy"], product, 10)
+        manager = world["kandy_manager"]
+        with SessionLocal() as s:
+            transfer = transfer_service.create_transfer(
+                s,
+                TransferCreate(
+                    source_branch_id=world["kandy"].id,
+                    destination_branch_id=world["colombo"].id,
+                    items=[LineIn(product_id=product.id, quantity=6)],
+                ),
+                manager,
+                RequestContext(),
+            )
+            s.commit()
+
+        barrier = threading.Barrier(3)
+
+        def approve(barrier=barrier, transfer=transfer, manager=manager):
+            with SessionLocal() as s:
+                barrier.wait()
+                try:
+                    transfer_service.transition(s, transfer.id, "approve", manager, RequestContext())
+                    s.commit()
+                    return 6
+                except stock.InsufficientStockError:
+                    s.rollback()
+                    return 0
+
+        def buy(quantity, barrier=barrier, product=product, manager=manager):
+            with SessionLocal() as s:
+                barrier.wait()
+                try:
+                    order_service.create_order(s, _order(world["kandy"], product, quantity), manager, RequestContext())
+                    s.commit()
+                    return quantity
+                except stock.InsufficientStockError:
+                    s.rollback()
+                    return 0
+
+        with ThreadPoolExecutor(3) as pool:
+            futures = [pool.submit(approve), pool.submit(buy, 5), pool.submit(buy, 4)]
+            reserved_total = sum(f.result() for f in futures)
+
+        assert reserved_total <= 10, f"round {round_no}"
+        assert stock_of(db, world["kandy"], product) == (10, reserved_total), f"round {round_no}"
+    assert ledger_matches_inventory(db)
