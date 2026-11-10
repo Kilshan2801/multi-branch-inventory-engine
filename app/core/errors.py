@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         code = _HTTP_CODES.get(exc.status_code, "http_error")
         message = exc.detail if isinstance(exc.detail, str) else "HTTP error"
         return error_response(request, exc.status_code, code, message, headers=getattr(exc, "headers", None))
+
+    @app.exception_handler(IntegrityError)
+    async def handle_integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
+        # A database constraint refused the write: the last line of defence caught something the
+        # service layer didn't. The request's transaction has already been rolled back.
+        logger.warning("Constraint violation (request_id=%s): %s", _request_id(request), exc.orig)
+        return error_response(
+            request,
+            status.HTTP_409_CONFLICT,
+            "constraint_violation",
+            "The change was rejected because it would break a data integrity rule",
+        )
 
     @app.exception_handler(Exception)
     async def handle_unexpected(request: Request, exc: Exception) -> JSONResponse:

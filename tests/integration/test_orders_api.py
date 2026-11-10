@@ -158,6 +158,26 @@ def test_crash_mid_transaction_leaves_no_partial_changes(db, shop, monkeypatch):
     assert count(db, StockMovement, StockMovement.reference_type == "order") == 0
 
 
+def test_database_constraint_stops_oversell_even_if_code_checks_fail(db, shop, monkeypatch):
+    """Switch OFF both application-level checks. The CHECK (reserved <= on_hand) constraint in
+    PostgreSQL must still refuse the oversell, roll back everything and answer 409."""
+    from app.services import stock
+
+    def unchecked_apply(db, item, *, on_hand_delta, reserved_delta, **_):
+        item.on_hand += on_hand_delta
+        item.reserved += reserved_delta
+
+    monkeypatch.setattr(stock, "ensure_available", lambda *a, **k: None)
+    monkeypatch.setattr(stock, "apply_movement", unchecked_apply)
+
+    res = new_order(TestClient(app), shop, [("phone", 11)], reserve=True)
+
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "constraint_violation"
+    assert stock_of(db, shop["kandy"], shop["phone"]) == (10, 0)
+    assert count(db, Order) == 0
+
+
 # --- Cancellation -----------------------------------------------------------
 
 
