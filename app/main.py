@@ -2,6 +2,7 @@ import logging
 import uuid
 
 from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 
 from app.api.routes import auth, catalog, inventory, orders, transfers, users
@@ -16,7 +17,7 @@ API_PREFIX = "/api/v1"
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version="1.0.0",
     description=(
         "Multi-branch inventory reservation and order processing engine.\n\n"
         "1. Call **POST /api/v1/auth/login** to get an access token.\n"
@@ -47,6 +48,12 @@ app.include_router(inventory.router, prefix=API_PREFIX)
 app.include_router(orders.router, prefix=API_PREFIX)
 app.include_router(transfers.router, prefix=API_PREFIX)
 app.include_router(inventory.audit, prefix=API_PREFIX)
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Opening the server address in a browser goes straight to the interactive docs."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health", tags=["Health"])

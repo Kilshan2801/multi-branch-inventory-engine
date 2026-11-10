@@ -106,3 +106,9 @@ def test_request_id_is_echoed(client):
     res = client.get(ME, headers={"X-Request-ID": "trace-123"})
     assert res.headers["X-Request-ID"] == "trace-123"
     assert res.json()["request_id"] == "trace-123"
+
+
+def test_root_redirects_to_docs(client):
+    res = client.get("/", follow_redirects=False)
+    assert res.status_code == 307
+    assert res.headers["location"] == "/docs"
