@@ -95,7 +95,9 @@ between our own transactions is possible.
 1. **Row lock + check** in the service gives the correct answer and a clear 409.
 2. **`apply_movement`** refuses any change that would make a row invalid.
 3. **Database CHECK constraints** (`on_hand >= 0`, `0 <= reserved <= on_hand`)
-   reject an impossible value even if the code above had a bug.
+   reject an impossible value even if the code above had a bug. The request is rolled back and
+   answered with `409 constraint_violation`. `test_database_constraint_stops_oversell_even_if_code_checks_fail`
+   switches layers 1 and 2 off and shows layer 3 alone still refuses an oversell.
 
 ## Transaction boundaries
 

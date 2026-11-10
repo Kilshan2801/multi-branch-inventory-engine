@@ -11,9 +11,7 @@ something fails halfway, or when someone tries to do something they're not allow
 Built with Python, FastAPI and PostgreSQL. Database changes are handled with Alembic,
 and tests are written with Pytest.
 
-## Where things are so far
-
-Right now the project has:
+## What it does
 
 - the full database design, with rules inside the database that stop bad stock numbers
 - login with JWT tokens
@@ -29,13 +27,17 @@ Right now the project has:
 - safe retries: sending the same request twice never reserves stock twice
 - the concurrency challenge: several people reserving the same stock at the same moment can never oversell
 - transfers between branches: request → approve → dispatch → receive, with reject and cancel
+- API documentation, a technical report, and scripts for a live demo
 
 More detail lives in the `docs` folder:
 
 - [docs/SCHEMA.md](docs/SCHEMA.md): the database diagram and the rules on each table
 - [docs/ROLES.md](docs/ROLES.md): what each role can and can't do, and why
 - [docs/CONCURRENCY.md](docs/CONCURRENCY.md): how simultaneous requests are kept safe, and how to see it for yourself
+- [docs/API.md](docs/API.md): every endpoint, with example requests and responses
 - [docs/DECISIONS.md](docs/DECISIONS.md): the design choices I made and their trade-offs
+- [docs/REPORT.md](docs/REPORT.md): the technical report (architecture, decisions, assumptions, limitations)
+- [docs/DEMO.md](docs/DEMO.md): my run sheet for the live demo
 
 ## What you need
 
@@ -116,7 +118,7 @@ again is safe:
 uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000/docs. Log in with `POST /api/v1/auth/login`, copy the
+Open http://localhost:8000 (it takes you straight to the API docs). Log in with `POST /api/v1/auth/login`, copy the
 `access_token`, click **Authorize** and paste it. After that you can try every endpoint from the browser.
 
 ## Running the tests
@@ -131,6 +133,18 @@ the test database is rebuilt from the migrations, so the migrations get tested t
 
 You can also run just one part: `pytest tests/unit` (quick, no database needed), `pytest tests/integration`,
 or `pytest tests/concurrency -v -s` for the races (more on that below).
+
+### The test scenarios the task asked for
+
+| Scenario | Where it's tested |
+|---|---|
+| Two requests competing for limited stock | `tests/concurrency/test_concurrent_reservations.py`: `test_two_concurrent_requests_competing_for_limited_stock`, `test_three_simultaneous_reservations_never_oversell`, `test_many_buyers_for_the_last_units` |
+| Cancelling gives back exactly what was reserved | `tests/integration/test_orders_api.py`: `test_cancel_releases_exactly_what_was_reserved`, `test_cancelling_twice_releases_only_once` |
+| Repeating a create or confirm doesn't reserve twice | `test_orders_api.py`: `test_retried_create_with_same_key_returns_same_order`, `test_repeated_reserve_does_not_double_reserve`, `test_repeated_confirm_is_harmless`; and `test_concurrent_duplicate_requests_with_one_idempotency_key` |
+| A failure halfway leaves nothing half-done | `test_orders_api.py`: `test_crash_mid_transaction_leaves_no_partial_changes`, `test_multi_line_order_is_all_or_nothing`, `test_over_reservation_rejected_and_nothing_created` |
+| Staff can't touch another branch | `test_inventory_api.py`: `test_staff_cannot_read_other_branch_inventory`; `test_orders_api.py`: `test_staff_cannot_touch_other_branch_order`, `test_staff_cannot_create_order_for_other_branch` |
+| A wrong order step is refused and changes nothing | `test_orders_api.py`: `test_invalid_transition_rejected_without_changing_data`; `test_transfers_api.py`: `test_invalid_transfer_transitions` |
+| A transfer can't send more than is available | `test_transfers_api.py`: `test_transfer_cannot_dispatch_more_than_available`, `test_approved_transfer_stock_is_protected_until_dispatch` |
 
 ## The concurrency challenge
 
@@ -150,6 +164,19 @@ pytest tests/concurrency -v -s        # the race, repeated 20 times with real th
 python -m scripts.concurrency_demo    # the same race against the running server
 ```
 
+## Trying the demo
+
+With the server running, open a second terminal and run:
+
+```bash
+python -m scripts.demo              # a successful order, a refused over-reservation,
+                                    # a cancellation and a transfer, with stock shown after each step
+python -m scripts.demo --only 4     # just one of them
+python -m scripts.concurrency_demo  # the 6 / 5 / 4 race, live
+```
+
+My step-by-step run sheet, including how to do the same things in the browser, is in [docs/DEMO.md](docs/DEMO.md).
+
 ## Database migrations
 
 ```bash
@@ -157,10 +184,12 @@ alembic upgrade head        # bring the database up to date
 alembic downgrade -1        # undo the last change
 ```
 
-There are two migrations so far: `0001` creates all the tables, rules and triggers, and `0002` makes the
+There are two migrations: `0001` creates all the tables, rules and triggers, and `0002` makes the
 timestamps on the stock history and audit log record the exact moment of each change.
 
-## Endpoints so far
+## Endpoints
+
+Full details with example requests and responses are in [docs/API.md](docs/API.md). In short:
 
 | Endpoint | Who can use it |
 |---|---|
@@ -217,7 +246,7 @@ app/
               order_service.py holds the order steps, idempotency.py handles retries
               transfer_service.py holds the transfer steps
 alembic/      database migrations
-scripts/      demo data, and the live race script
+scripts/      demo data, the demo scripts, and the OpenAPI export
 tests/        unit tests, tests against the real database, and the concurrency races
-docs/         database diagram, roles, concurrency, design decisions
+docs/         database diagram, roles, API, concurrency, decisions, report, demo run sheet
 ```

@@ -191,6 +191,27 @@ receiving it and creating a return transfer, which keeps both movements visible 
 *Known limitation:* no partial receipt or damaged-in-transit handling; a receiving branch records damage
 afterwards with a negative adjustment.
 
+## Day 4: tests, documentation and demo
+
+### D35. Every required test scenario maps to named tests
+The README lists each scenario from the task next to the tests that prove it. A dedicated two-request
+race (7 and 6 of 10 units) was added so "two concurrent requests competing for limited stock" is tested
+literally, alongside the three-request challenge.
+
+### D36. Demo scripts instead of manual clicking
+`scripts/demo.py` runs the four required demo flows against a running server and prints the stock after
+every step; `scripts/concurrency_demo.py` runs the 6/5/4 race live. They make the demo repeatable and
+fast, and Swagger remains available to show the API itself ([DEMO.md](DEMO.md)).
+
+### D37. OpenAPI is the API contract
+Swagger UI is generated from the same type hints that validate requests, so documentation can't drift
+from behaviour. `docs/openapi.json` is exported for Postman (Import → File) instead of maintaining a
+separate hand-written collection.
+
+### D38. Code style is enforced with ruff
+`ruff check` and `ruff format` (configured in `pyproject.toml`) keep the code consistent and catch
+unused imports and common bugs.
+
 ## Assumptions
 - A product catalogue is shared by all branches; stock is per branch.
 - Admins are global and belong to no branch; every other user belongs to exactly one.
